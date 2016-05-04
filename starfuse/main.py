@@ -11,4 +11,3 @@ import starfuse.config as config
 def main():
     """StarFuse entry point"""
     print config.pak_file
-    print config.mount_dir
