@@ -183,8 +183,6 @@ class SBBF03(object):
         block_region_size = len(self._vfile) - self._header_size
         self._block_count = block_region_size / self._block_size
         log.debug('block count: %d', self._block_count)
-        if not float(float(block_region_size) / float(self._block_size)).is_integer():
-            log.warning('detected trailing bytes on file; block file may be corrupt')
 
         # map header
         self.header = self._vfile.region(offset=0, size=self._header_size)
