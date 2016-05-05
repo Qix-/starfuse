@@ -151,6 +151,7 @@ class SBBF03(object):
         self._block_size = 0
 
         self.header = None
+        self.user_header = None
         self.blocks = dict()
 
         self.__load(path)
@@ -186,3 +187,7 @@ class SBBF03(object):
 
         # map header
         self.header = self._vfile.region(offset=0, size=self._header_size)
+
+        # map user deader
+        self.user_header = self._vfile.region(offset=0x20, size=self._header_size - 0x20)
+        log.debug('mapped headers successfully')
