@@ -160,6 +160,11 @@ class SBBF03(object):
         """Closes the virtual file and the real file handles"""
         self._vfile.close()
 
+    def get_block(self, bid):
+        """Gets a block given the block ID"""
+        base_offset = self._header_size + (self._block_size * bid)
+        return self._vfile.region(offset=base_offset, size=self._block_size)
+
     def __load(self, path):
         log.debug('loading SBBF03 block file: %s', path)
         region = self._vfile.region(0, 32)
