@@ -116,15 +116,12 @@ class VirtualRegion(object):
 
         results = []
         length = min(length, self.size)
-        log.debug('length=%d', length)
         abs_offset = offset + self.base_offset
-        log.debug('abs_offset=%d', abs_offset)
 
         cur_page = self.base_page
         while length > 0:
             readable = mmap.PAGESIZE - abs_offset
             readable = min(readable, length)
-            log.debug('read page: %d, %d', abs_offset, readable)
 
             results.append(self._pages[cur_page][abs_offset:abs_offset + readable])
 
