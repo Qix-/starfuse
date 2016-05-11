@@ -7,7 +7,7 @@ of having to unpack/re-pack it over and over again.
 
 import logging
 import starfuse.config as config
-from starfuse.pak.storage.SBBF03 import SBBF03
+from starfuse.pak.pakfile import Package
 
 log = logging.getLogger(__name__)
 
@@ -15,4 +15,5 @@ log = logging.getLogger(__name__)
 def main():
     """StarFuse entry point"""
     log.info('starting StarFuse')
-    SBBF03(config.pak_file)
+    pak = Package(config.pak_file)
+    print repr(pak.get_index())

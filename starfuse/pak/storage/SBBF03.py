@@ -56,7 +56,7 @@ class VirtualFile(object):
                 self.pages[i] = mmap.mmap(self._file.fileno(), offset=i * mmap.PAGESIZE, length=mmap.PAGESIZE)
 
         # create a region
-        return VirtualRegion(self.pages, base_page=lower_page_id, base_offset=offset - lower_page, size=size)
+        return VirtualRegion(self, self.pages, base_page=lower_page_id, base_offset=offset - lower_page, size=size)
 
 
 class VirtualRegion(object):
@@ -65,8 +65,11 @@ class VirtualRegion(object):
     This class is a 'faked' mmap() result that allows for the finer allocation of memory mappings
     beyond/below what the filesystem really allows. It is backed by true mmap()'d pages and
     uses magic methods to achieve the appearance of being an isolated region of memory."""
-    def __init__(self, pages, base_page, base_offset, size):
+    __slots__ = '_pages', '_vfile', 'base_page', 'base_offset', 'size', 'cursor'
+
+    def __init__(self, vfile, pages, base_page, base_offset, size):
         self._pages = pages
+        self._vfile = vfile
         self.base_page = base_page
         self.base_offset = base_offset
         self.size = size
@@ -83,8 +86,12 @@ class VirtualRegion(object):
         return (abs_offset // mmap.PAGESIZE) + self.base_page, abs_offset % mmap.PAGESIZE
 
     def __getitem__(self, offset):
-        if not isinstance(offset, int):
-            raise TypeError('offset is not an integer: %s' % repr(offset))
+        if isinstance(offset, slice):
+            (start, fin, step) = offset.indices(self.size)
+            result = self.read(offset=start, length=fin - start)
+            if step not in [None, 1]:
+                result = result[::step]
+            return result
 
         if offset >= self.size:
             raise RegionOverflowError(offset)
@@ -109,6 +116,13 @@ class VirtualRegion(object):
     def __exit__(self, tipo, value, traceback):
         return self
 
+    def region(self, offset=-1, size=-1):
+        if offset < 0:
+            offset = self.cursor
+        if size < 0:
+            size = self.size - offset
+        return self._vfile.region(self.base_offset + offset, size)
+
     def read(self, length=1, offset=-1):
         """Reads data from the virtual region"""
         if offset == -1:
@@ -118,7 +132,9 @@ class VirtualRegion(object):
         length = min(length, self.size)
         abs_offset = offset + self.base_offset
 
-        cur_page = self.base_page
+        cur_page = self.base_page + (abs_offset // mmap.PAGESIZE)
+        abs_offset %= mmap.PAGESIZE
+
         while length > 0:
             readable = mmap.PAGESIZE - abs_offset
             readable = min(readable, length)
@@ -160,8 +176,8 @@ class SBBF03(object):
         """Closes the virtual file and the real file handles"""
         self._vfile.close()
 
-    def get_block(self, bid):
-        """Gets a block given the block ID"""
+    def get_region(self, bid):
+        """Gets a block region given the block ID"""
         base_offset = self._header_size + (self._block_size * bid)
         return self._vfile.region(offset=base_offset, size=self._block_size)
 
@@ -189,6 +205,7 @@ class SBBF03(object):
 
         # map header
         self.header = self._vfile.region(offset=0, size=self._header_size)
+        self.user_header = self.header.region(0x20)
 
         # map user deader
         self.user_header = self._vfile.region(offset=0x20, size=self._header_size - 0x20)
