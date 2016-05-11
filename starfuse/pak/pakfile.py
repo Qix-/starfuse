@@ -8,15 +8,19 @@ from starfuse.pak import SBON as sbon
 log = logging.getLogger(__name__)
 
 
+def encode_key(key):
+    digest = hashlib.sha256(key.encode('utf-8')).digest()
+    log.debug('encode key=%s digest len=%d', str(key), len(digest))
+    return digest
+
+
 class KeyStore(BTreeDB4):
+    """A B-tree database that uses SHA-256 hashes for key lookup."""
     def __init__(self, path):
         super(KeyStore, self).__init__(path)
 
-    """A B-tree database that uses SHA-256 hashes for key lookup."""
     def encode_key(self, key):
-        digest = hashlib.sha256(key.encode('utf-8')).digest()
-        log.debug('encode key=%s digest len=%d', str(key), len(digest))
-        return digest
+        return encode_key(key)
 
 
 class Package(KeyStore):
