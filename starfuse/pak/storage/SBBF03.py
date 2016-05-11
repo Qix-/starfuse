@@ -6,6 +6,10 @@ import struct
 
 log = logging.getLogger(__name__)
 
+# getting 'too many files open' error? increase the constant on the next line
+# (must be an exponent of 2)
+PAGESIZE = 128 * mmap.PAGESIZE
+
 
 class InvalidBlockFileMagic(Exception):
     """A block file has an invalid magic string"""
@@ -27,10 +31,14 @@ class VirtualFile(object):
     """
     def __init__(self, path):
         # make sure we're sane here - allocation granularity needs to divide into page size!
-        assert (mmap.PAGESIZE % mmap.ALLOCATIONGRANULARITY) == 0, 'page size is not a multiple of allocation granularity! you\'re on a really messed up POSIX system...'
+        assert (PAGESIZE % mmap.ALLOCATIONGRANULARITY) == 0, 'page size is not a multiple of allocation granularity! you\'re on a really messed up POSIX system...'
 
         self._file = open(path, 'r+b')
         self.pages = dict()
+
+        self._file.seek(0, 2)
+        self._filesize = self._file.tell()
+        self._file.seek(0, 0)
 
     def __len__(self):
         self._file.seek(0, 2)
@@ -44,16 +52,18 @@ class VirtualFile(object):
 
     def region(self, offset, size):
         """Requests a virtual region to be 'allocated'"""
-        lower_page = offset - (offset % mmap.PAGESIZE)
-        upper_page = ((offset + size) // mmap.PAGESIZE) * mmap.PAGESIZE
-        lower_page_id = lower_page // mmap.PAGESIZE
-        upper_page_id = upper_page // mmap.PAGESIZE
+        lower_page = offset - (offset % PAGESIZE)
+        upper_page = ((offset + size) // PAGESIZE) * PAGESIZE
+        lower_page_id = lower_page // PAGESIZE
+        upper_page_id = upper_page // PAGESIZE
 
         # make sure we're mapped
         for i in range(lower_page_id, upper_page_id + 1):
             if i not in self.pages:
-                log.debug('mapping vfile page: id=%d offset=%d', i, i * mmap.PAGESIZE)
-                self.pages[i] = mmap.mmap(self._file.fileno(), offset=i * mmap.PAGESIZE, length=mmap.PAGESIZE)
+                page_offset = i * PAGESIZE
+                page_size = min(PAGESIZE, self._filesize - page_offset)
+                log.debug('mapping vfile page: id=%d offset=%d size=%d', i, page_offset, page_size)
+                self.pages[i] = mmap.mmap(self._file.fileno(), offset=page_offset, length=page_size)
 
         # create a region
         return VirtualRegion(self, self.pages, base_page=lower_page_id, base_offset=offset - lower_page, size=size)
@@ -83,7 +93,7 @@ class VirtualRegion(object):
 
     def _get_offset_page(self, offset):
         abs_offset = self.base_offset + offset
-        return (abs_offset // mmap.PAGESIZE) + self.base_page, abs_offset % mmap.PAGESIZE
+        return (abs_offset // PAGESIZE) + self.base_page, abs_offset % PAGESIZE
 
     def __getitem__(self, offset):
         if isinstance(offset, slice):
@@ -132,11 +142,11 @@ class VirtualRegion(object):
         length = min(length, self.size)
         abs_offset = offset + self.base_offset
 
-        cur_page = self.base_page + (abs_offset // mmap.PAGESIZE)
-        abs_offset %= mmap.PAGESIZE
+        cur_page = self.base_page + (abs_offset // PAGESIZE)
+        abs_offset %= PAGESIZE
 
         while length > 0:
-            readable = mmap.PAGESIZE - abs_offset
+            readable = PAGESIZE - abs_offset
             readable = min(readable, length)
 
             results.append(self._pages[cur_page][abs_offset:abs_offset + readable])

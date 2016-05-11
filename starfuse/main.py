@@ -16,4 +16,4 @@ def main():
     """StarFuse entry point"""
     log.info('starting StarFuse')
     pak = Package(config.pak_file)
-    print repr(pak.get_index())
+    pak.get_index()
