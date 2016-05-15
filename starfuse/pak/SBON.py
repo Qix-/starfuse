@@ -1,13 +1,11 @@
 import collections
 import struct
 
-
 # Override range with xrange when running Python 2.x.
 try:
     range = xrange
 except:
     pass
-
 
 Document = collections.namedtuple('Document', ['name', 'version', 'data'])
 

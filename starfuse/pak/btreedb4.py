@@ -13,8 +13,8 @@ import io
 import struct
 import logging
 
-from starfuse.pak.storage.SBBF03 import SBBF03
-import starfuse.pak.SBON as sbon
+import starfuse.pak.sbon as sbon
+from starfuse.pak.sbbf03 import SBBF03
 
 # Override range with xrange when running Python 2.x.
 try:

@@ -1,7 +1,7 @@
 from distutils.core import setup
 setup(
     name='starfuse',
-    packages=['starfuse', 'starfuse.pak', 'starfuse.pak.storage'],
+    packages=['starfuse', 'starfuse.pak', 'starfuse.pak'],
     version='0.2.0',
     description='Mount StarBound .pak files as FUSE filesystems',
     author='Josh Junon',

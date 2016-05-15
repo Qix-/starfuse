@@ -7,7 +7,7 @@ from threading import Lock
 from fuse import FuseOSError, Operations, LoggingMixIn
 from stat import S_IFDIR, S_IFREG
 from time import time
-from starfuse.pakfile import Pakfile
+from starfuse.pak.pakfile import Pakfile
 from starfuse.vfs import FileNotFoundError, IsADirError, NotADirError
 
 log = logging.getLogger(__name__)
