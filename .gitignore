@@ -3,6 +3,5 @@
 
 *.pyc
 /env/
-/pkg/
 /dist/
 /MANIFEST

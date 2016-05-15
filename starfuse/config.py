@@ -4,6 +4,8 @@ import sys
 import argparse
 import logging
 
+LOGGERFMT = '%(asctime)s [%(levelname)s] %(name)s <%(funcName)s>: %(message)s'
+
 
 class Config(object):
     """StarFuse configuration class and option parser"""
@@ -19,7 +21,9 @@ class Config(object):
         self._args = parser.parse_args()
 
         if self._args.verbose:
-            logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(levelname)s] %(name)s <%(funcName)s>: %(message)s')
+            logging.basicConfig(level=logging.DEBUG, format=LOGGERFMT)
+        else:
+            logging.basicConfig(format=LOGGERFMT)
 
     @property
     def pak_file(self):
