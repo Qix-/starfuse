@@ -8,13 +8,14 @@ writes as well.
 
 import mmap
 import logging
+import starfuse.config as config
 
 log = logging.getLogger(__name__)
 
 
 # getting 'too many files open' error? increase the constant on the next line
 # (must be an exponent of 2)
-PAGESIZE = 128 * mmap.PAGESIZE
+PAGESIZE = config.page_count * mmap.PAGESIZE
 
 
 class RegionOverflowError(Exception):
@@ -66,10 +67,10 @@ class MappedFile(object):
                 self.pages[i] = mmap.mmap(self._file.fileno(), offset=page_offset, length=page_size)
 
         # create a region
-        return VirtualRegion(self, self.pages, base_page=lower_page_id, base_offset=offset - lower_page, size=size)
+        return Region(self, self.pages, base_page=lower_page_id, base_offset=offset - lower_page, size=size)
 
 
-class VirtualRegion(object):
+class Region(object):
     """A virtual region of mapped memory
 
     This class is a 'faked' mmap() result that allows for the finer allocation of memory mappings

@@ -36,7 +36,7 @@ class SBBF03(MappedFile):
     def __del__(self):
         self.close()
 
-    def get_region(self, bid):
+    def block_region(self, bid):
         """Gets a block region given the block ID"""
         base_offset = self._header_size + (self._block_size * bid)
         return self.region(offset=base_offset, size=self._block_size)

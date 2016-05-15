@@ -64,9 +64,9 @@ class BTreeDB4(SBBF03):
         database (for example if the key needs to be hashed)."""
         return key
 
-    def get_block(self, index):
+    def block(self, index):
         """Gets a block object given the specified index"""
-        region = self.get_region(index)
+        region = self.block_region(index)
 
         signature = bytes(region.read(2))
 
@@ -105,13 +105,13 @@ class BTreeDB4(SBBF03):
         """Returns the binary data for the provided pre-encoded key."""
         assert len(key) == self.key_size, 'Invalid key length'
 
-        block = self.get_block(self.root_node)
+        block = self.block(self.root_node)
         assert block is not None, 'Root block is None'
 
         # Scan down the B-tree until we reach a leaf.
         while isinstance(block, BTreeIndex):
-            block_number = block.get_block_for_key(key)
-            block = self.get_block(block_number)
+            block_number = block.block_for_key(key)
+            block = self.block(block_number)
         assert isinstance(block, BTreeLeaf), 'Did not reach a leaf'
 
         return self.get_leaf_value(block, key)
@@ -120,13 +120,13 @@ class BTreeDB4(SBBF03):
         """Returns the binary size for the provided pre-encoded key."""
         assert len(key) == self.key_size, 'Invalid key length'
 
-        block = self.get_block(self.root_node)
+        block = self.block(self.root_node)
         assert block is not None, 'Root block is None'
 
         # Scan down the B-tree until we reach a leaf.
         while isinstance(block, BTreeIndex):
-            block_number = block.get_block_for_key(key)
-            block = self.get_block(block_number)
+            block_number = block.block_for_key(key)
+            block = self.block(block_number)
         assert isinstance(block, BTreeLeaf), 'Did not reach a leaf'
 
         return self.get_leaf_size(block, key)
@@ -227,7 +227,7 @@ class BTreeIndex(BTreeBlock):
     def __str__(self):
         return 'Index(level={}, num_keys={})'.format(self.level, self.num_keys)
 
-    def get_block_for_key(self, key):
+    def block_for_key(self, key):
         i = bisect.bisect_right(self.keys, key)
         return self.values[i]
 
@@ -314,7 +314,7 @@ class LeafReader(object):
             assert next_block not in self._visited, 'Tried to read visited block'
             self._visited.append(next_block)
 
-            self._leaf = self._file.get_block(next_block)
+            self._leaf = self._file.block(next_block)
             if self._file.repair and isinstance(self._leaf, BTreeFree):
                 self._leaf = BTreeRestoredLeaf(self._leaf)
 
