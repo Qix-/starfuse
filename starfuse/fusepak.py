@@ -18,13 +18,10 @@ def fuse_op(fn):
         try:
             return fn(*args, **kwargs)
         except FileNotFoundError as e:
-            log.exception('ENOENT: %s', e.message)
             raise FuseOSError(errno.ENOENT)
         except IsADirError as e:
-            log.exception('EISDIR: %s', e.message)
             raise FuseOSError(errno.EISDIR)
         except NotADirError as e:
-            log.exception('ENOTDIR: %s', e.message)
             raise FuseOSError(errno.ENOTDIR)
         except Exception as e:
             log.exception('EIO: %s', e.message)
