@@ -2,6 +2,10 @@
 BTreeDB4 implementation by Blixt
 
 Modified to work with Qix' mapped virtual file implementation
+TODO clean this up to use regions for most memory operations.
+     this will make writes a whole lot easier. I recommend removing
+     read() from virtual regions in the SBBF03 implementation to
+     allow for fast-fail development.
 """
 import binascii
 import bisect
@@ -86,6 +90,17 @@ class BTreeDB4(SBBF03):
             else:
                 raise KeyError(key, binascii.hexlify(encoded_key))
 
+    def get_size(self, key):
+        """Returns the deserialized size of the data for the provided key."""
+        encoded_key = self.encode_key(key)
+        try:
+            return self.get_binary_size(encoded_key)
+        except KeyError:
+            if encoded_key == key:
+                raise KeyError(binascii.hexlify(key))
+            else:
+                raise KeyError(key, binascii.hexlify(encoded_key))
+
     def get_binary(self, key):
         """Returns the binary data for the provided pre-encoded key."""
         assert len(key) == self.key_size, 'Invalid key length'
@@ -101,6 +116,21 @@ class BTreeDB4(SBBF03):
 
         return self.get_leaf_value(block, key)
 
+    def get_binary_size(self, key):
+        """Returns the binary size for the provided pre-encoded key."""
+        assert len(key) == self.key_size, 'Invalid key length'
+
+        block = self.get_block(self.root_node)
+        assert block is not None, 'Root block is None'
+
+        # Scan down the B-tree until we reach a leaf.
+        while isinstance(block, BTreeIndex):
+            block_number = block.get_block_for_key(key)
+            block = self.get_block(block_number)
+        assert isinstance(block, BTreeLeaf), 'Did not reach a leaf'
+
+        return self.get_leaf_size(block, key)
+
     def get_leaf_value(self, leaf, key):
         stream = LeafReader(self, leaf)
 
@@ -114,6 +144,22 @@ class BTreeDB4(SBBF03):
 
             if cur_key == key:
                 return value
+
+        raise KeyError(key)
+
+    def get_leaf_size(self, leaf, key):
+        stream = LeafReader(self, leaf)
+
+        # The number of keys is read on-demand because only leaves pointed to
+        # by an index contain this number (others just contain arbitrary data).
+        num_keys, = struct.unpack('>i', stream.read(4))
+        assert num_keys < 1000, 'Leaf had unexpectedly high number of keys'
+        for i in range(num_keys):
+            cur_key = stream.read(self.key_size)
+            size = sbon.read_varlen_number(stream)
+
+            if cur_key == key:
+                return size
 
         raise KeyError(key)
 

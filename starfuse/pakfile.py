@@ -41,11 +41,25 @@ class Pakfile(object):
         # (directory dict, filename, lookup entry, True if file, False if directory)
         return (direc, fname, entry, not isinstance(entry, dict))
 
-    def get_file_contents(self, abspath):
+    def get_directory_listing(self, abspath):
         (_, _, lookup, isfile) = self.get_entry(abspath)
+        if isfile:
+            raise NotADirError(abspath)
+        return lookup.keys()
+
+    def get_size(self, abspath):
+        (_, _, _, isfile) = self.get_entry(abspath)
         if not isfile:
             raise IsADirError(abspath)
-        return self.get_using_encoded_key(lookup)
+        return self.pkg.get_size(abspath)
+
+    def get_file_contents(self, abspath, offset=0, size=-1):
+        (_, _, _, isfile) = self.get_entry(abspath)
+        if not isfile:
+            raise IsADirError(abspath)
+        # XXX this will get more performant when TreeDB4 is refactored to use mappings
+        #     instead of full-on reads.
+        return self.pkg.get(abspath)[offset:offset + size]
 
     def readdir(self, abspath):
         (_, _, lookup, isfile) = self.get_entry(abspath)
