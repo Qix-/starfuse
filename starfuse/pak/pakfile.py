@@ -23,8 +23,8 @@ def encode_key(key):
 
 class KeyStore(BTreeDB4):
     """A B-tree database that uses SHA-256 hashes for key lookup."""
-    def __init__(self, path):
-        super(KeyStore, self).__init__(path)
+    def __init__(self, path, page_count):
+        super(KeyStore, self).__init__(path, page_count)
 
     def encode_key(self, key):
         return encode_key(key)
@@ -35,8 +35,8 @@ class Package(KeyStore):
     DIGEST_KEY = '_digest'
     INDEX_KEY = '_index'
 
-    def __init__(self, path):
-        super(Package, self).__init__(path)
+    def __init__(self, path, page_count):
+        super(Package, self).__init__(path, page_count)
         self._index = None
 
     def encode_key(self, key):
@@ -59,9 +59,9 @@ class Package(KeyStore):
 
 
 class Pakfile(object):
-    def __init__(self, path):
+    def __init__(self, path, page_count):
         self.vfs = VFS()
-        self.pkg = Package(path)
+        self.pkg = Package(path, page_count)
 
         log.debug('obtaining file list')
         file_index = self.pkg.get_index()

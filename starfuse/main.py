@@ -16,6 +16,6 @@ log = logging.getLogger(__name__)
 def main():
     """StarFuse entry point"""
     log.info('starting StarFuse')
-    pak = FusePAK(config.pak_file)
+    pak = FusePAK(config.pak_file, page_count=config.page_count)
     log.info('mounting on %s', config.mount_dir)
     FUSE(pak, config.mount_dir, foreground=True)

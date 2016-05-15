@@ -34,8 +34,8 @@ class BTreeDB4(SBBF03):
     that file format. In the future we may want to split away from the
     inheritance chain and instead use the SBBF02 file as an API.
     """
-    def __init__(self, path):
-        super(BTreeDB4, self).__init__(path)
+    def __init__(self, path, page_count):
+        super(BTreeDB4, self).__init__(path, page_count)
 
         self.key_size = None
 

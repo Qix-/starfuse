@@ -50,8 +50,8 @@ def make_file_struct(size, isfile=True, ctime=time(), mtime=time(), atime=time()
 
 class FusePAK(LoggingMixIn, Operations):
     """FUSE operations implementation for StarBound PAK files"""
-    def __init__(self, pakfile):
-        self.pakfile = Pakfile(pakfile)
+    def __init__(self, pakfile, page_count):
+        self.pakfile = Pakfile(pakfile, page_count)
         self._lock = Lock()
 
     @fuse_op

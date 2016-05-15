@@ -8,66 +8,14 @@ writes as well.
 
 import mmap
 import logging
-import starfuse.config as config
 
 log = logging.getLogger(__name__)
-
-
-# getting 'too many files open' error? increase the constant on the next line
-# (must be an exponent of 2)
-PAGESIZE = config.page_count * mmap.PAGESIZE
-
-# make sure we're sane here - allocation granularity needs to divide into page size!
-assert (PAGESIZE % mmap.ALLOCATIONGRANULARITY) == 0, 'page size is not a multiple of allocation granularity!'
 
 
 class RegionOverflowError(Exception):
     """Data at an offset was requested but the offset was greater than the allocated size"""
     def __init__(self, offset):
-        super(RegionOverflowError, self).__init__('region overflow offset: %s' % offset)
-
-
-class MappedFile(object):
-    """Manages mmap()-ings of a file into vmem.
-
-    This class prevents virtual address space from growing too large by
-    re-using existing maps if the requested regions have already been mapped.
-    """
-    def __init__(self, path):
-        self._file = open(path, 'r+b')
-        self.pages = dict()
-
-        self._file.seek(0, 2)
-        self._filesize = self._file.tell()
-        self._file.seek(0, 0)
-
-    def __len__(self):
-        self._file.seek(0, 2)
-        return self._file.tell()
-
-    def close(self):
-        """Unmaps all mappings"""
-        for i in self.pages:
-            self.pages[i].close()
-        self._file.close()
-
-    def region(self, offset, size):
-        """Requests a virtual region be 'allocated'"""
-        lower_page = offset - (offset % PAGESIZE)
-        upper_page = ((offset + size) // PAGESIZE) * PAGESIZE
-        lower_page_id = lower_page // PAGESIZE
-        upper_page_id = upper_page // PAGESIZE
-
-        # make sure we're mapped
-        for i in range(lower_page_id, upper_page_id + 1):
-            if i not in self.pages:
-                page_offset = i * PAGESIZE
-                page_size = min(PAGESIZE, self._filesize - page_offset)
-                log.debug('mapping vfile page: id=%d offset=%d size=%d', i, page_offset, page_size)
-                self.pages[i] = mmap.mmap(self._file.fileno(), offset=page_offset, length=page_size)
-
-        # create a region
-        return Region(self, self.pages, base_page=lower_page_id, base_offset=offset - lower_page, size=size)
+        super(RegionOverflowError, self).__init__('region overflow offset: %d (did you allocate?)' % offset)
 
 
 class Region(object):
@@ -76,50 +24,19 @@ class Region(object):
     This class is a 'faked' mmap() result that allows for the finer allocation of memory mappings
     beyond/below what the filesystem really allows. It is backed by true mmap()'d pages and
     uses magic methods to achieve the appearance of being an isolated region of memory."""
-    __slots__ = '_pages', '_vfile', 'base_page', 'base_offset', 'size', 'cursor'
+    __slots__ = 'parent', 'base_offset', '__size', 'cursor'
 
-    def __init__(self, vfile, pages, base_page, base_offset, size):
-        self._pages = pages
-        self._vfile = vfile
-        self.base_page = base_page
+    def __init__(self, parent, base_offset, size):
+        self.parent = parent
         self.base_offset = base_offset
-        self.size = size
+        self.__size = size
         self.cursor = 0
 
     def __len__(self):
-        return self.size
+        return self.__size
 
     def __str__(self):
-        return self.read(offset=0, length=self.size)
-
-    def _offset_page(self, offset):
-        abs_offset = self.base_offset + offset
-        return (abs_offset // PAGESIZE) + self.base_page, abs_offset % PAGESIZE
-
-    def __getitem__(self, offset):
-        if isinstance(offset, slice):
-            (start, fin, step) = offset.indices(self.size)
-            result = self.read(offset=start, length=fin - start)
-            if step not in [None, 1]:
-                result = result[::step]
-            return result
-
-        if offset >= self.size:
-            raise RegionOverflowError(offset)
-
-        page, rel_offset = self._offset_page(offset)
-        return self._pages[page][rel_offset]
-
-    def __setitem__(self, offset, value):
-        if not isinstance(offset, int):
-            raise TypeError('offset is not an integer: %s' % repr(offset))
-
-        if offset >= self.size:
-            raise RegionOverflowError(offset)
-
-        page, rel_offset = self._offset_page(offset)
-        self._pages[page][rel_offset] = value
-        return value
+        return str(self.read(offset=0, length=len(self)))
 
     def __enter__(self):
         return self
@@ -128,26 +45,106 @@ class Region(object):
         return self
 
     def region(self, offset=-1, size=-1):
-        if offset < 0:
-            offset = self.cursor
-        if size < 0:
-            size = self.size - offset
-        return self._vfile.region(self.base_offset + offset, size)
+        (offset, size) = self._sanitize_segment(offset, size)
+        return self.parent.region(self.base_offset + offset, size)
 
-    def read(self, length=1, offset=-1):
-        """Reads data from the virtual region"""
-        if offset == -1:
+    def _sanitize_segment(self, offset, length):
+        if offset >= len(self):
+            raise ValueError('offset falls outside region size')
+        elif offset < 0:
             offset = self.cursor
+
+        if length == 0:
+            raise ValueError('length must be at least 1')
+        elif length < 0:
+            length = len(self) - offset
+
+        return (offset, length)
+
+    def read(self, length=-1, offset=-1, advance=True):
+        (offset, length) = self._sanitize_segment(offset, length)
+        offset += self.base_offset
+        result = self.parent.read(length, offset, advance=advance)
+        if advance:
+            self.cursor += len(result)
+        return result
+
+    def write(self, value, length=-1, offset=-1, advance=True):
+        if length < 0:
+            length = len(value)
+        (offset, length) = self._sanitaize_segment(offset, length)
+        offset += self.base_offset
+        result = self.parent.write(value, length, offset, advance=advance)
+        if advance:
+            self.cursor += result
+        return result
+
+
+class MappedFile(Region):
+    """Manages mmap()-ings of a file into vmem.
+
+    This class prevents virtual address space from growing too large by
+    re-using existing maps if the requested regions have already been mapped.
+    """
+    def __init__(self, path, page_count):
+        # getting 'too many files open' error? increase the constant on the next line
+        # (must be an exponent of 2)
+        self._page_size = page_count * mmap.PAGESIZE
+
+        # make sure we're sane here - allocation granularity needs to divide into page size!
+        assert (self._page_size % mmap.ALLOCATIONGRANULARITY) == 0, 'page size is not a multiple of allocation granularity!'
+
+        self._file = open(path, 'r+b')
+        self._pages = dict()
+
+        self.cursor = 0
+        super(MappedFile, self).__init__(self, base_offset=0, size=len(self))
+
+    def __len__(self):
+        self._file.seek(0, 2)
+        size = self._file.tell()
+        return size
+
+    def __del__(self):
+        self.close()
+
+    def close(self):
+        """Unmaps all mappings"""
+        for i in self._pages:
+            self._pages[i].close()
+        self._file.close()
+
+    def region(self, offset, size):
+        """Requests a virtual region be 'allocated'"""
+        lower_page = offset - (offset % self._page_size)
+        upper_page = ((offset + size) // self._page_size) * self._page_size
+        lower_page_id = lower_page // self._page_size
+        upper_page_id = upper_page // self._page_size
+
+        # make sure we're mapped
+        for i in range(lower_page_id, upper_page_id + 1):
+            if i not in self._pages:
+                page_offset = i * self._page_size
+                page_size = min(self._page_size, len(self) - page_offset)
+                log.debug('mapping vfile page: id=%d offset=%d size=%d', i, page_offset, page_size)
+                self._pages[i] = mmap.mmap(self._file.fileno(), offset=page_offset, length=page_size)
+
+        # create a region
+        return Region(self, base_offset=offset, size=size)
+
+    def read(self, length=1, offset=-1, advance=True):
+        """Reads data from the virtual region"""
+        (offset, length) = self._sanitize_segment(offset, length)
 
         results = []
-        length = min(length, self.size)
-        abs_offset = offset + self.base_offset
+        length = min(length, len(self))
 
-        cur_page = self.base_page + (abs_offset // PAGESIZE)
-        abs_offset %= PAGESIZE
+        abs_offset = offset
+        cur_page = abs_offset // self._page_size
+        abs_offset %= self._page_size
 
         while length > 0:
-            readable = PAGESIZE - abs_offset
+            readable = self._page_size - abs_offset
             readable = min(readable, length)
 
             results.append(self._pages[cur_page][abs_offset:abs_offset + readable])
@@ -157,5 +154,38 @@ class Region(object):
             cur_page += 1
 
         result = ''.join(results)
-        self.cursor += len(result)
+        if advance:
+            self.cursor += len(result)
         return result
+
+    def __getitem__(self, offset):
+        if isinstance(offset, slice):
+            (start, fin, step) = offset.indices(len(self))
+            result = self.read(offset=start, length=fin - start)
+            if step not in [None, 1]:
+                result = result[::step]
+            return result
+
+        if not isinstance(offset, int):
+            raise TypeError('offset is not an integer: %s' % repr(offset))
+
+        if offset >= len(self):
+            raise RegionOverflowError(offset)
+
+        page = offset // self._page_size
+        rel_offset = offset % self._page_size
+        return self._pages[page][rel_offset]
+
+    def __setitem__(self, offset, value):
+        if isinstance(offset, slice):
+            raise ValueError('Slice assignment not supported in mapped files; assemble your data first and then write')
+
+        if not isinstance(offset, int):
+            raise TypeError('offset is not an integer: %s' % repr(offset))
+
+        if offset >= len(self):
+            raise RegionOverflowError(offset)
+
+        page = offset // self._page_size
+        rel_offset = offset % self._page_size
+        self._pages[page][rel_offset] = value
