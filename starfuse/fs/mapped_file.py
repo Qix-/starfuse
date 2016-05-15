@@ -51,7 +51,7 @@ class MappedFile(object):
         self._file.close()
 
     def region(self, offset, size):
-        """Requests a virtual region to be 'allocated'"""
+        """Requests a virtual region be 'allocated'"""
         lower_page = offset - (offset % PAGESIZE)
         upper_page = ((offset + size) // PAGESIZE) * PAGESIZE
         lower_page_id = lower_page // PAGESIZE

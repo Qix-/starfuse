@@ -14,7 +14,7 @@ class InvalidMagic(Exception):
         super(InvalidMagic, self).__init__('a block file has an invalid magic string: %s' % path)
 
 
-class SBBF03(object):
+class SBBF03(MappedFile):
     """Implements a StarBound block file v3 store that is backed by a file
 
     Can also be used to read in v2.
@@ -22,7 +22,7 @@ class SBBF03(object):
     It's worth noting that the memory regions in this class are mapped and not
     read-in."""
     def __init__(self, path):
-        self._vfile = MappedFile(path)
+        super(SBBF03, self).__init__(path)
 
         self._header_size = 0
         self._block_size = 0
@@ -36,18 +36,14 @@ class SBBF03(object):
     def __del__(self):
         self.close()
 
-    def close(self):
-        """Closes the virtual file and the real file handles"""
-        self._vfile.close()
-
     def get_region(self, bid):
         """Gets a block region given the block ID"""
         base_offset = self._header_size + (self._block_size * bid)
-        return self._vfile.region(offset=base_offset, size=self._block_size)
+        return self.region(offset=base_offset, size=self._block_size)
 
     def __load(self, path):
         log.debug('loading SBBF03 block file: %s', path)
-        region = self._vfile.region(0, 32)
+        region = self.region(0, 32)
 
         # magic constant
         magic = region.read(6)
@@ -63,14 +59,14 @@ class SBBF03(object):
         log.debug('header_size=%d, block_size=%d', self._header_size, self._block_size)
 
         # calculate number of blocks
-        block_region_size = len(self._vfile) - self._header_size
+        block_region_size = len(self) - self._header_size
         self._block_count = block_region_size / self._block_size
         log.debug('block count: %d', self._block_count)
 
         # map header
-        self.header = self._vfile.region(offset=0, size=self._header_size)
+        self.header = self.region(offset=0, size=self._header_size)
         self.user_header = self.header.region(0x20)
 
         # map user deader
-        self.user_header = self._vfile.region(offset=0x20, size=self._header_size - 0x20)
+        self.user_header = self.region(offset=0x20, size=self._header_size - 0x20)
         log.debug('mapped headers successfully')
