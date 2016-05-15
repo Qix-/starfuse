@@ -17,6 +17,9 @@ log = logging.getLogger(__name__)
 # (must be an exponent of 2)
 PAGESIZE = config.page_count * mmap.PAGESIZE
 
+# make sure we're sane here - allocation granularity needs to divide into page size!
+assert (PAGESIZE % mmap.ALLOCATIONGRANULARITY) == 0, 'page size is not a multiple of allocation granularity!'
+
 
 class RegionOverflowError(Exception):
     """Data at an offset was requested but the offset was greater than the allocated size"""
@@ -31,9 +34,6 @@ class MappedFile(object):
     re-using existing maps if the requested regions have already been mapped.
     """
     def __init__(self, path):
-        # make sure we're sane here - allocation granularity needs to divide into page size!
-        assert (PAGESIZE % mmap.ALLOCATIONGRANULARITY) == 0, 'page size is not a multiple of allocation granularity! you\'re on a really messed up POSIX system...'
-
         self._file = open(path, 'r+b')
         self.pages = dict()
 
