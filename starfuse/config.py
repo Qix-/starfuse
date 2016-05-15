@@ -24,7 +24,7 @@ class Config(object):
         if self._args.verbose:
             logging.basicConfig(level=logging.DEBUG, format=LOGGERFMT)
         else:
-            logging.basicConfig(format=LOGGERFMT)
+            logging.basicConfig(level=logging.INFO, format=LOGGERFMT)
 
     @property
     def pak_file(self):
