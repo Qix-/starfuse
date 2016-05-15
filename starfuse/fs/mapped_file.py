@@ -92,7 +92,7 @@ class Region(object):
     def __str__(self):
         return self.read(offset=0, length=self.size)
 
-    def _get_offset_page(self, offset):
+    def _offset_page(self, offset):
         abs_offset = self.base_offset + offset
         return (abs_offset // PAGESIZE) + self.base_page, abs_offset % PAGESIZE
 
@@ -107,7 +107,7 @@ class Region(object):
         if offset >= self.size:
             raise RegionOverflowError(offset)
 
-        page, rel_offset = self._get_offset_page(offset)
+        page, rel_offset = self._offset_page(offset)
         return self._pages[page][rel_offset]
 
     def __setitem__(self, offset, value):
@@ -117,7 +117,7 @@ class Region(object):
         if offset >= self.size:
             raise RegionOverflowError(offset)
 
-        page, rel_offset = self._get_offset_page(offset)
+        page, rel_offset = self._offset_page(offset)
         self._pages[page][rel_offset] = value
         return value
 
