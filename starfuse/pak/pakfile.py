@@ -10,7 +10,7 @@ import logging
 
 import starfuse.pak.sbon as sbon
 from starfuse.pak.btreedb4 import BTreeDB4
-from starfuse.vfs import VFS, FileNotFoundError, IsADirError, NotADirError
+from starfuse.fs.vfs import VFS, FileNotFoundError, IsADirError, NotADirError
 
 log = logging.getLogger(__name__)
 
