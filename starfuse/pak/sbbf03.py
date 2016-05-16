@@ -41,6 +41,11 @@ class SBBF03(MappedFile):
         base_offset = self._header_size + (self._block_size * bid)
         return self.region(offset=base_offset, size=self._block_size)
 
+    @property
+    def block_count(self):
+        block_region_size = len(self) - self._header_size
+        return block_region_size // self._block_size
+
     def __load(self, path):
         log.debug('loading SBBF03 block file: %s', path)
         region = self.region(0, 32)
@@ -59,14 +64,12 @@ class SBBF03(MappedFile):
         log.debug('header_size=%d, block_size=%d', self._header_size, self._block_size)
 
         # calculate number of blocks
-        block_region_size = len(self) - self._header_size
-        self._block_count = block_region_size / self._block_size
-        log.debug('block count: %d', self._block_count)
+        log.debug('block count: %d', self.block_count)
 
         # map header
         self.header = self.region(offset=0, size=self._header_size)
         self.user_header = self.header.region(0x20)
 
         # map user header
-        self.user_header = self.region(offset=0x20, size=self._header_size - 0x20)
+        self.user_header = self.header.region(offset=0x20)
         log.debug('mapped headers successfully')
