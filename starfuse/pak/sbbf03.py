@@ -54,7 +54,7 @@ class SBBF03(MappedFile):
         magic = region.read(6)
         if magic not in [b'SBBF03', b'SBBF02']:
             raise InvalidMagic(path)
-        log.debug('block file has valid magic constant')
+        log.debug('block file has valid magic constant: %s', magic)
 
         # get the header and block size
         # this is all we need to actually read from the file before we start mmap-ing.
