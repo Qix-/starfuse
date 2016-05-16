@@ -21,8 +21,8 @@ class SBBF03(MappedFile):
 
     It's worth noting that the memory regions in this class are mapped and not
     read-in."""
-    def __init__(self, path, page_count):
-        super(SBBF03, self).__init__(path, page_count)
+    def __init__(self, path, page_count, read_only=False):
+        super(SBBF03, self).__init__(path, page_count, read_only=read_only)
 
         self._header_size = 0
         self._block_size = 0

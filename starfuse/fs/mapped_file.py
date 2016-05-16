@@ -12,6 +12,12 @@ import logging
 log = logging.getLogger(__name__)
 
 
+class ReadOnlyError(Exception):
+    """The mapped file is flagged as read-only"""
+    def __init__(self, path):
+        super(ReadOnlyError, self).__init__('mapped file is flagged as read only: %s' % path)
+
+
 class RegionOverflowError(Exception):
     """Data at an offset was requested but the offset was greater than the allocated size"""
     def __init__(self, offset):
@@ -86,7 +92,7 @@ class MappedFile(Region):
     This class prevents virtual address space from growing too large by
     re-using existing maps if the requested regions have already been mapped.
     """
-    def __init__(self, path, page_count):
+    def __init__(self, path, page_count, read_only=False):
         # getting 'too many files open' error? increase the constant on the next line
         # (must be an exponent of 2)
         self._page_size = page_count * mmap.PAGESIZE
@@ -96,6 +102,9 @@ class MappedFile(Region):
 
         self._file = open(path, 'r+b')
         self._pages = dict()
+
+        self.read_only = read_only
+        self._path = path
 
         self.cursor = 0
         super(MappedFile, self).__init__(self, base_offset=0, size=len(self))
@@ -158,6 +167,13 @@ class MappedFile(Region):
             self.cursor += len(result)
         return result
 
+    def write(self, value, offset=-1, length=-1, advance=True):
+        if self.read_only:
+            raise ReadOnlyError(self._path)
+
+        # TODO
+        return 0
+
     def __getitem__(self, offset):
         if isinstance(offset, slice):
             (start, fin, step) = offset.indices(len(self))
@@ -177,6 +193,9 @@ class MappedFile(Region):
         return self._pages[page][rel_offset]
 
     def __setitem__(self, offset, value):
+        if self.read_only:
+            raise ReadOnlyError(self._path)
+
         if isinstance(offset, slice):
             raise ValueError('Slice assignment not supported in mapped files; assemble your data first and then write')
 

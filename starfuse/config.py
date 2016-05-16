@@ -17,6 +17,7 @@ class Config(object):
         parser.add_argument('pakfile', type=str, help='the .pak file on which to operate')
         parser.add_argument('mount_dir', type=str, help='the directory on which to mount the PAK file')
         parser.add_argument('-v', '--verbose', help='be noisy', action='store_true')
+        parser.add_argument('-w', '--write', help='allow modifications to the .pak file', action='store_true')
         parser.add_argument('--pages', type=int, help='map this number of pages at a time (default: 256)', default=256)
 
         self._args = parser.parse_args()
@@ -40,5 +41,10 @@ class Config(object):
     def page_count(self):
         """Gets the number of pages to map at once"""
         return self._args.pages
+
+    @property
+    def read_only(self):
+        """Whether or not the file is read-only protected"""
+        return not self._args.write
 
 sys.modules[__name__] = Config()

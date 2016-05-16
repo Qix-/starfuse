@@ -23,8 +23,8 @@ def encode_key(key):
 
 class KeyStore(BTreeDB4):
     """A B-tree database that uses SHA-256 hashes for key lookup."""
-    def __init__(self, path, page_count):
-        super(KeyStore, self).__init__(path, page_count)
+    def __init__(self, path, page_count, read_only=False):
+        super(KeyStore, self).__init__(path, page_count, read_only=read_only)
 
     def encode_key(self, key):
         return encode_key(key)
@@ -35,8 +35,8 @@ class Package(KeyStore):
     DIGEST_KEY = '_digest'
     INDEX_KEY = '_index'
 
-    def __init__(self, path, page_count):
-        super(Package, self).__init__(path, page_count)
+    def __init__(self, path, page_count, read_only=False):
+        super(Package, self).__init__(path, page_count, read_only=read_only)
         self._index = None
 
     def encode_key(self, key):
@@ -59,9 +59,9 @@ class Package(KeyStore):
 
 
 class Pakfile(object):
-    def __init__(self, path, page_count):
+    def __init__(self, path, page_count, read_only=False):
         self.vfs = VFS()
-        self.pkg = Package(path, page_count)
+        self.pkg = Package(path, page_count, read_only=False)
 
         log.debug('obtaining file list')
         file_index = self.pkg.get_index()
@@ -69,6 +69,14 @@ class Pakfile(object):
         for filepath, lookup in file_index.iteritems():
             self.vfs.add_file(filepath, lookup, mkdirs=True)
         log.info('registered %d files with virtual filesystem', len(file_index))
+
+    @property
+    def read_only(self):
+        return self.pkg.read_only
+
+    @read_only.setter
+    def read_only(self, val):
+        self.pkg.read_only = val
 
     def get_entry(self, abspath):
         if abspath is None or abspath == '/':
