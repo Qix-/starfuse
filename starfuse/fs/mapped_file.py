@@ -93,6 +93,9 @@ class MappedFile(Region):
     re-using existing maps if the requested regions have already been mapped.
     """
     def __init__(self, path, page_count, read_only=False):
+        # XXX TODO NOTE remove this line when write functionality is added.
+        read_only = True
+
         # getting 'too many files open' error? increase the constant on the next line
         # (must be an exponent of 2)
         self._page_size = page_count * mmap.PAGESIZE
@@ -172,6 +175,7 @@ class MappedFile(Region):
             raise ReadOnlyError(self._path)
 
         # TODO
+        assert False, 'not implemented'
         return 0
 
     def __getitem__(self, offset):

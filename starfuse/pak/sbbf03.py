@@ -67,6 +67,6 @@ class SBBF03(MappedFile):
         self.header = self.region(offset=0, size=self._header_size)
         self.user_header = self.header.region(0x20)
 
-        # map user deader
+        # map user header
         self.user_header = self.region(offset=0x20, size=self._header_size - 0x20)
         log.debug('mapped headers successfully')

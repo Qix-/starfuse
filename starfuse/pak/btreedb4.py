@@ -1,11 +1,8 @@
 """
-BTreeDB4 implementation by Blixt
+BTreeDB4 implementation
 
-Modified to work with Qix' mapped virtual file implementation
-TODO clean this up to use regions for most memory operations.
-     this will make writes a whole lot easier. I recommend removing
-     read() from virtual regions in the SBBF03 implementation to
-     allow for fast-fail development.
+Heavily influenced by Blixt's starfuse-py utilities,
+this implementation's sine qua non.
 """
 import binascii
 import bisect
