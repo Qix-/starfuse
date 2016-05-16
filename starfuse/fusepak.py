@@ -72,16 +72,16 @@ class FusePAK(LoggingMixIn, Operations):
     def getattr(self, path, fh=None):
         if path == '/':
             return self.make_file_struct(0, isfile=False)
-        (_, _, _, isfile) = self.pakfile.get_entry(path)
+        (_, _, _, isfile) = self.pakfile.entry(path)
         if not isfile:
             return self.make_file_struct(0, isfile=False)
-        size = self.pakfile.get_size(path)
+        size = self.pakfile.file_size(path)
         return self.make_file_struct(size)
 
     @fuse_op
     def readdir(self, path, fh=None):
-        return self.pakfile.get_directory_listing(path)
+        return self.pakfile.directory_listing(path)
 
     @fuse_op
     def read(self, path, size, offset, fh=None):
-        return self.pakfile.get_file_contents(path, offset, size)
+        return self.pakfile.file_contents(path, offset, size)

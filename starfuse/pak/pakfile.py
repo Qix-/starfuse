@@ -15,19 +15,10 @@ from starfuse.fs.vfs import VFS, FileNotFoundError, IsADirError, NotADirError
 log = logging.getLogger(__name__)
 
 
-def encode_key(key):
-    digest = hashlib.sha256(key.encode('utf-8')).digest()
-    log.debug('encode key=%s digest len=%d', str(key), len(digest))
-    return digest
-
-
 class KeyStore(BTreeDB4):
     """A B-tree database that uses SHA-256 hashes for key lookup."""
-    def __init__(self, path, page_count, read_only=False):
-        super(KeyStore, self).__init__(path, page_count, read_only=read_only)
-
     def encode_key(self, key):
-        return encode_key(key)
+        return hashlib.sha256(key.encode('utf-8')).digest()
 
 
 class Package(KeyStore):
@@ -49,7 +40,8 @@ class Package(KeyStore):
         if self._index:
             return self._index
 
-        stream = io.BytesIO(self.get(Package.INDEX_KEY))
+        # TODO optimize this to use new regions system after refactoring BTreeDB
+        stream = io.BytesIO(self.file_contents(Package.INDEX_KEY))
         if self.identifier == 'Assets1':
             self._index = sbon.read_string_list(stream)
         elif self.identifier == 'Assets2':
@@ -78,7 +70,7 @@ class Pakfile(object):
     def read_only(self, val):
         self.pkg.read_only = val
 
-    def get_entry(self, abspath):
+    def entry(self, abspath):
         if abspath is None or abspath == '/':
             return (self.vfs.root, None, self.vfs.root, False)
 
@@ -95,28 +87,26 @@ class Pakfile(object):
         # (directory dict, filename, lookup entry, True if file, False if directory)
         return (direc, fname, entry, not isinstance(entry, dict))
 
-    def get_directory_listing(self, abspath):
-        (_, _, lookup, isfile) = self.get_entry(abspath)
+    def directory_listing(self, abspath):
+        (_, _, lookup, isfile) = self.entry(abspath)
         if isfile:
             raise NotADirError(abspath)
         return lookup.keys()
 
-    def get_size(self, abspath):
-        (_, _, _, isfile) = self.get_entry(abspath)
+    def file_size(self, abspath):
+        (_, _, _, isfile) = self.entry(abspath)
         if not isfile:
             raise IsADirError(abspath)
-        return self.pkg.get_size(abspath)
+        return self.pkg.file_size(abspath)
 
-    def get_file_contents(self, abspath, offset=0, size=-1):
-        (_, _, _, isfile) = self.get_entry(abspath)
+    def file_contents(self, abspath, offset=0, size=-1):
+        (_, _, _, isfile) = self.entry(abspath)
         if not isfile:
             raise IsADirError(abspath)
-        # XXX this will get more performant when TreeDB4 is refactored to use mappings
-        #     instead of full-on reads.
-        return self.pkg.get(abspath)[offset:offset + size]
+        return self.pkg.file_contents(abspath)[offset:offset + size]
 
     def readdir(self, abspath):
-        (_, _, lookup, isfile) = self.get_entry(abspath)
+        (_, _, lookup, isfile) = self.entry(abspath)
         if isfile:
             raise NotADirError(abspath)
 

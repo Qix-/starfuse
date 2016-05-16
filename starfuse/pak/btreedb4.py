@@ -22,6 +22,39 @@ except:
 log = logging.getLogger(__name__)
 
 
+class BTreeKeyError(Exception):
+    def __init__(self, key):
+        super(BTreeKeyError, self).__init__(key)
+
+
+def keyed(fn):
+    def wrapper(*args, **kwargs):
+        raw_key = False
+        key = None
+        try:
+            if 'raw_key' in kwargs:
+                raw_key = kwargs['raw_key']
+                del kwargs['raw_key']
+
+            self = args[0]
+            key = args[1]
+
+            if not raw_key:
+                key = self.encode_key(key)
+
+            assert len(key) == self.key_size, 'Invalid key length'
+
+            nargs = (self, key) + args[2:]
+            return fn(*nargs, **kwargs)
+        except (BTreeKeyError, KeyError):
+            hex_key = binascii.hexlify(key)
+            if raw_key:
+                raise BTreeKeyError(hex_key)
+            else:
+                raise BTreeKeyError('%s (%s)' % (hex_key, args[1]))
+    return wrapper
+
+
 class BTreeDB4(SBBF03):
     """A B-tree database format on top of the SBBF03 block format.
 
@@ -42,19 +75,8 @@ class BTreeDB4(SBBF03):
         self.alternate_root_node = None
         self.root_node = None
         self.root_node_is_leaf = None
-        self.other_root_node = None
-        self.other_root_node_is_leaf = None
 
         self.__load()
-
-    def commit(self):
-        """Alternates the root node."""
-        self.root_node, self.other_root_node = self.other_root_node, self.root_node
-        self.alternate_root_node = not self.alternate_root_node
-
-    def deserialize_data(self, data):
-        """Can be overridden to deserialize data before returning it."""
-        return data
 
     def encode_key(self, key):
         """Can be overridden to encode a key before looking for it in the
@@ -67,40 +89,17 @@ class BTreeDB4(SBBF03):
 
         signature = bytes(region.read(2))
 
-        for cls in _block_types:
-            if cls.SIGNATURE == signature:
-                return cls(self, index, region)
+        if signature in _block_types:
+            return _block_types[signature](self, index, region)
 
         if signature is not b'\0\0':
             raise Exception('Invalid signature detected: %s', signature)
 
         return None
 
-    def get(self, key):
-        """Returns the deserialized data for the provided key."""
-        encoded_key = self.encode_key(key)
-        try:
-            return self.deserialize_data(self.get_binary(encoded_key))
-        except KeyError:
-            if encoded_key == key:
-                raise KeyError(binascii.hexlify(key))
-            else:
-                raise KeyError(key, binascii.hexlify(encoded_key))
-
-    def get_size(self, key):
-        """Returns the deserialized size of the data for the provided key."""
-        encoded_key = self.encode_key(key)
-        try:
-            return self.get_binary_size(encoded_key)
-        except KeyError:
-            if encoded_key == key:
-                raise KeyError(binascii.hexlify(key))
-            else:
-                raise KeyError(key, binascii.hexlify(encoded_key))
-
-    def get_binary(self, key):
-        """Returns the binary data for the provided pre-encoded key."""
-        assert len(key) == self.key_size, 'Invalid key length'
+    @keyed
+    def _leaf_for_key(self, key):
+        """Returns the binary data for the provided key."""
 
         block = self.block(self.root_node)
         assert block is not None, 'Root block is None'
@@ -111,24 +110,11 @@ class BTreeDB4(SBBF03):
             block = self.block(block_number)
         assert isinstance(block, BTreeLeaf), 'Did not reach a leaf'
 
-        return self.get_leaf_value(block, key)
+        return block
 
-    def get_binary_size(self, key):
-        """Returns the binary size for the provided pre-encoded key."""
-        assert len(key) == self.key_size, 'Invalid key length'
-
-        block = self.block(self.root_node)
-        assert block is not None, 'Root block is None'
-
-        # Scan down the B-tree until we reach a leaf.
-        while isinstance(block, BTreeIndex):
-            block_number = block.block_for_key(key)
-            block = self.block(block_number)
-        assert isinstance(block, BTreeLeaf), 'Did not reach a leaf'
-
-        return self.get_leaf_size(block, key)
-
-    def get_leaf_value(self, leaf, key):
+    @keyed
+    def file_contents(self, key):
+        leaf = self._leaf_for_key(key, raw_key=True)
         stream = LeafReader(self, leaf)
 
         # The number of keys is read on-demand because only leaves pointed to
@@ -137,14 +123,18 @@ class BTreeDB4(SBBF03):
         assert num_keys < 1000, 'Leaf had unexpectedly high number of keys'
         for i in range(num_keys):
             cur_key = stream.read(self.key_size)
+            # TODO do some smarter parsing here (read_bytes is easy to recreate
+            # using regions)
             value = sbon.read_bytes(stream)
 
             if cur_key == key:
                 return value
 
-        raise KeyError(key)
+        raise BTreeKeyError(key)
 
-    def get_leaf_size(self, leaf, key):
+    @keyed
+    def file_size(self, key):
+        leaf = self._leaf_for_key(key, raw_key=True)
         stream = LeafReader(self, leaf)
 
         # The number of keys is read on-demand because only leaves pointed to
@@ -153,20 +143,14 @@ class BTreeDB4(SBBF03):
         assert num_keys < 1000, 'Leaf had unexpectedly high number of keys'
         for i in range(num_keys):
             cur_key = stream.read(self.key_size)
+            # TODO do much better streaming here when LeafReader is refactored
             size = sbon.read_varlen_number(stream)
+            stream.read(size)
 
             if cur_key == key:
                 return size
 
-        raise KeyError(key)
-
-    def get_raw(self, key):
-        """Returns the raw data for the provided key."""
-        return self.get_binary(self.encode_key(key))
-
-    def get_using_encoded_key(self, key):
-        """Returns the deserialized data for the provided pre-encoded key."""
-        return self.deserialize_data(self.get_binary(key))
+        raise BTreeKeyError(key)
 
     def __load(self):
         stream = self.user_header
@@ -329,4 +313,8 @@ class LeafReader(object):
 
         return data
 
-_block_types = [BTreeIndex, BTreeFree, BTreeLeaf]
+_block_types = {
+    BTreeIndex.SIGNATURE: BTreeIndex,
+    BTreeLeaf.SIGNATURE: BTreeLeaf,
+    BTreeFree.SIGNATURE: BTreeFree
+}
